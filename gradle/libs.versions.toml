@@ -1,0 +1,14 @@
+[versions]
+chicory = "1.7.5-nge2"
+teavm = "0.13.0"
+wasm2class = "0.5.0"
+
+[libraries]
+chicory-runtime = { module = "org.ngengine.chicory:runtime", version.ref = "chicory" }
+chicory-wasm = { module = "org.ngengine.chicory:wasm", version.ref = "chicory" }
+teavm-jso = { module = "org.teavm:teavm-jso", version.ref = "teavm" }
+teavm-jso-apis = { module = "org.teavm:teavm-jso-apis", version.ref = "teavm" }
+
+[plugins]
+teavm = { id = "org.teavm", version.ref = "teavm" }
+wasm2class = { id = "at.released.wasm2class.plugin", version.ref = "wasm2class" }

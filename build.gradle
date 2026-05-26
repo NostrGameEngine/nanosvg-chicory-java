@@ -1,0 +1,197 @@
+plugins {
+    id 'java-library'
+    id 'application'
+    alias(libs.plugins.wasm2class)
+    alias(libs.plugins.teavm)
+}
+
+group = 'org.ngengine'
+version = '0.1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withSourcesJar()
+}
+
+sourceSets {
+    teavm {
+        java.srcDirs = ['src/test/teavm/java']
+        resources.srcDirs = [
+                'src/test/teavm/resources',
+                layout.buildDirectory.dir('generated-chicory/java/resources').get().asFile
+        ]
+    }
+}
+
+tasks.named('compileJava', JavaCompile) {
+    options.release = 11
+}
+
+tasks.named('compileTestJava', JavaCompile) {
+    options.release = 21
+}
+
+tasks.matching { it.name == 'compileTeavmJava' }.configureEach {
+    if (it instanceof JavaCompile) {
+        it.options.release = 11
+    }
+}
+
+tasks.named('test', Test) {
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    failOnNoDiscoveredTests = false
+}
+
+def generatedWasm = layout.buildDirectory.file('generated/wasm/nanosvg.wasm')
+
+dependencies {
+    api libs.chicory.runtime
+    implementation libs.chicory.wasm
+    teavmImplementation libs.teavm.jso
+    teavmImplementation libs.teavm.jso.apis
+}
+
+tasks.register('compileNanosvgWasm', Exec) {
+    group = 'build'
+    description = 'Compile NanoSVG wrapper to freestanding Wasm'
+
+    inputs.files(
+            'src/wasm/c/mini_libc.c',
+            'src/wasm/c/nanosvg_wrapper.c',
+            'third_party/nanosvg/src/nanosvg.h',
+            'third_party/nanosvg/src/nanosvgrast.h'
+    )
+    outputs.file(generatedWasm)
+
+    doFirst {
+        def pathEntries = (System.getenv('PATH') ?: '').split(File.pathSeparator)
+        def hasCommand = { String name ->
+            pathEntries.any { entry -> new File(entry, name).canExecute() }
+        }
+
+        if (!hasCommand('clang')) {
+            throw new GradleException(
+                    'Missing `clang` in PATH. Install an LLVM/Clang toolchain with wasm32 support.'
+            )
+        }
+
+        def hasWasmLinker = hasCommand('wasm-ld') || hasCommand('ld.lld')
+        if (!hasWasmLinker) {
+            throw new GradleException(
+                    'Missing WebAssembly linker (`wasm-ld` or `ld.lld`) in PATH. ' +
+                            'Install LLVM LLD (for example package `lld` on Fedora/Debian/Ubuntu).'
+            )
+        }
+
+        generatedWasm.get().asFile.parentFile.mkdirs()
+    }
+
+    commandLine(
+            'clang',
+            '--target=wasm32-unknown-unknown',
+            '-O2',
+            '-nostdlib',
+            '-ffreestanding',
+            '-fno-builtin',
+            '-Wl,--no-entry',
+            '-Wl,--export-memory',
+            '-Wl,--initial-memory=16777216',
+            '-Wl,--max-memory=16777216',
+            '-Wl,--allow-undefined',
+            '-Wl,--export=wasm_alloc',
+            '-Wl,--export=wasm_reset',
+            '-Wl,--export=nsvg_render_rgba',
+            '-Wl,--export=nsvg_get_last_output_ptr',
+            '-Wl,--export=nsvg_get_last_output_size',
+            '-Wl,--export=nsvg_get_last_width',
+            '-Wl,--export=nsvg_get_last_height',
+            '-Wl,--export=nsvg_get_last_stride',
+            '-I', 'src/wasm/include',
+            '-I', 'third_party/nanosvg/src',
+            'src/wasm/c/mini_libc.c',
+            'src/wasm/c/nanosvg_wrapper.c',
+            '-o', generatedWasm.get().asFile.absolutePath
+    )
+}
+
+wasm2class {
+    targetPackage = 'org.ngengine.nanosvg.wasm'
+    modules {
+        create('nanosvg') {
+            wasm = generatedWasm.get().asFile
+        }
+    }
+}
+
+tasks.named('classes') {
+    dependsOn 'compileNanosvgWasm'
+}
+
+tasks.matching {
+    it.name.toLowerCase().contains('wasm') && it.name != 'compileNanosvgWasm'
+}.configureEach {
+    dependsOn 'compileNanosvgWasm'
+}
+
+tasks.named('processResources') {
+    dependsOn 'compileNanosvgWasm'
+}
+
+application {
+    mainClass = 'org.ngengine.nanosvg.NanoSvgDemo'
+}
+
+teavm {
+    all {
+        mainClass = 'org.ngengine.nanosvg.NanoSvgTeaVmDemo'
+        outputDir = layout.buildDirectory.dir('teavm')
+    }
+    js {
+        targetFileName = 'nanosvg-teavm.js'
+        relativePathInOutputDir = '.'
+        obfuscated = false
+        sourceMap = true
+        entryPointName = 'main'
+    }
+}
+
+tasks.named('generateJavaScript') {
+    dependsOn 'classes'
+    finalizedBy 'copyTeaVmWebAssets'
+}
+
+tasks.named('processTeavmResources') {
+    dependsOn 'precompileWasm2Class'
+}
+
+tasks.register('copyTeaVmWebAssets', Copy) {
+    dependsOn 'processTeavmResources'
+    from 'src/test/teavm/web'
+    from(layout.buildDirectory.file('resources/teavm/org/ngengine/nanosvg/wasm/Nanosvg.meta')) {
+        into '.'
+    }
+    into layout.buildDirectory.dir('teavm')
+}
+
+tasks.register('teavmBrowserDemo') {
+    group = 'verification'
+    description = 'Builds TeaVM JavaScript demo and copies index.html to build/teavm'
+    dependsOn 'generateJavaScript', 'copyTeaVmWebAssets'
+}
+
+tasks.register('awtDragDropTest', JavaExec) {
+    group = 'verification'
+    description = 'Runs the manual AWT drag-and-drop SVG rendering test harness'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.ngengine.nanosvg.NanoSvgAwtDragDropTest'
+    dependsOn 'testClasses'
+}
