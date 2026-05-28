@@ -1,7 +1,6 @@
-# NanoSVG -> Wasm -> Java
+# NanoSVG Chicory Java
 
-This project compiles NanoSVG to wasm and then to java with Chicory's build-time.
-
+This is a pure Java 11 build of NanoSVG compiled to wasm and then to java using [Chicory](https://chicory.dev/).
 
 ## What this exposes
 
