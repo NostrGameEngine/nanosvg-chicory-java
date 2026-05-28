@@ -1,6 +1,6 @@
 # NanoSVG Chicory Java
 
-This is a pure Java 11 build of NanoSVG compiled to wasm and then to java using [Chicory](https://chicory.dev/).
+This is a pure Java 11 build of [NanoSVG](https://github.com/memononen/nanosvg) compiled to wasm and then to java using [Chicory](https://chicory.dev/).
 
 ## What this exposes
 
