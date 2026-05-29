@@ -1,6 +1,9 @@
 name: Maven Central Snapshot
 
 on:
+  workflow_dispatch:
+  schedule:
+    - cron: '27 3 * * 0'
   push:
     branches:
       - '**'
