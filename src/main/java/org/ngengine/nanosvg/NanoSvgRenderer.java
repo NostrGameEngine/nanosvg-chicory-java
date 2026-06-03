@@ -39,6 +39,54 @@ public final class NanoSvgRenderer  {
             throw new IllegalArgumentException("target dimensions must be > 0");
         }
 
+        return renderWithExport(
+                "nsvg_render_rgba",
+                svgUtf8,
+                targetWidth,
+                targetHeight
+        );
+    }
+
+    public NanoSvgRenderResult renderViewBox(
+            ByteBuffer svgUtf8,
+            int targetWidth,
+            int targetHeight,
+            int viewBoxX,
+            int viewBoxY,
+            int viewBoxWidth,
+            int viewBoxHeight,
+            NanoSvgFitMode fitMode
+    ) {
+        if (svgUtf8 == null) {
+            throw new IllegalArgumentException("svgUtf8 is null");
+        }
+        if (targetWidth <= 0 || targetHeight <= 0) {
+            throw new IllegalArgumentException("target dimensions must be > 0");
+        }
+        if (viewBoxWidth <= 0 || viewBoxHeight <= 0) {
+            throw new IllegalArgumentException("viewBox dimensions must be > 0");
+        }
+        if (viewBoxX < 0 || viewBoxY < 0) {
+            throw new IllegalArgumentException("viewBox origin must be >= 0");
+        }
+        if (fitMode == null) {
+            throw new IllegalArgumentException("fitMode is null");
+        }
+
+        return renderWithExport(
+                "nsvg_render_rgba_viewbox",
+                svgUtf8,
+                targetWidth,
+                targetHeight,
+                viewBoxX,
+                viewBoxY,
+                viewBoxWidth,
+                viewBoxHeight,
+                fitMode.wasmValue()
+        );
+    }
+
+    private NanoSvgRenderResult renderWithExport(String exportName, ByteBuffer svgUtf8, long... renderArgs) {
         instance.export("wasm_reset").apply();
 
         ByteBuffer input = svgUtf8.duplicate();
@@ -50,7 +98,13 @@ public final class NanoSvgRenderer  {
         Memory memory = instance.memory();
         memory.write(inputPtr, inputBytes);
 
-        long[] renderResult = instance.export("nsvg_render_rgba").apply(inputPtr, inputSize, targetWidth, targetHeight);
+        long[] args = new long[renderArgs.length + 2];
+        args[0] = inputPtr;
+        args[1] = inputSize;
+        for (int i = 0; i < renderArgs.length; i++) {
+            args[i + 2] = renderArgs[i];
+        }
+        long[] renderResult = instance.export(exportName).apply(args);
         int outputPtr = (int) renderResult[0];
         if (outputPtr == 0) {
             throw new IllegalStateException("NanoSVG wasm render failed");

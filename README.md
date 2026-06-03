@@ -15,6 +15,13 @@ NanoSvgRenderResult result = renderer.render(svgUtf8ByteBuffer, 256, 256);
 ByteBuffer rgba = result.pixels();
 ```
 
+To render a source-space SVG viewBox into a target image:
+
+```java
+NanoSvgRenderResult viewBox = renderer.renderViewBox(
+        svgUtf8ByteBuffer, 256, 256, 64, 64, 128, 128, NanoSvgFitMode.CONTAIN);
+```
+
 ## Build requirements
 
 - JDK 11+
